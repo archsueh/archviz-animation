@@ -159,6 +159,50 @@ python3 ~/.agents/skills/archviz-animated/scripts/render_animated_diagram.py \
 
 `folder` `file` `scan` `shield` `db` `hash` `package`
 
+## [6] 柱状图动画 (Bar Chart Animation)
+
+交叉优化：archviz-diagram + archviz-animate
+
+**功能：** 将柱状图数据转换为生长动画 GIF
+
+**脚本：** `scripts/render_animated_bar_chart.py`
+
+**数据格式：**
+```json
+{
+  "title": "Chart Title",
+  "subtitle": "Description",
+  "categories": ["A", "B", "C"],
+  "values": [10, 20, 15],
+  "labels": ["Label A", "Label B", "Label C"],
+  "width": 800,
+  "height": 500
+}
+```
+
+**渲染命令：**
+```bash
+python3 scripts/render_animated_bar_chart.py \
+  --spec data.json \
+  --outdir ./output \
+  --basename chart-name \
+  --frames 30 \
+  --fps 15
+```
+
+**参数：**
+- `--frames`: 帧数（默认 30）
+- `--fps`: 帧率（默认 15）
+
+**输出：**
+- `chart-name.gif` — 动画
+- `chart-name.png` — 静态图
+
+**动画效果：**
+- 柱状图从底部生长
+- ease-out 缓动函数
+- 数值标签淡入
+
 ## 文字规范
 
 - `title.prefix`：2-4 词
