@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Math Visualization — Theme Comparison</title>
+<style>
+  body { font-family: system-ui; background: #f8f8f8; margin: 0; padding: 40px; }
+  h1 { text-align: center; color: #333; }
+  .grid { display: flex; gap: 40px; justify-content: center; flex-wrap: wrap; }
+  .card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+  .card h3 { padding: 12px 20px; margin: 0; font-size: 16px; }
+  .card.color h3 { background: #f5f0eb; color: #2c2c2c; }
+  .card.mono h3 { background: #f0f0f0; color: #1a1a1a; }
+  .card video { display: block; width: 500px; }
+  p.usage { text-align: center; color: #666; margin-top: 30px; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<h1>archviz-animate — Math Visualization</h1>
+
+<div class="grid">
+  <div class="card color">
+    <h3>🎨 Color Theme (3Blue1Brown style)</h3>
+    <video autoplay loop muted src="output/math-viz-color.mp4"></video>
+  </div>
+  <div class="card mono">
+    <h3>⬜ Mono Theme (Minimal black/white)</h3>
+    <video autoplay loop muted src="output/math-viz-mono.mp4"></video>
+  </div>
+</div>
+
+<p class="usage">
+  --theme color | --theme mono
+</p>
+
+</body>
+</html>
