@@ -203,7 +203,61 @@ python3 scripts/render_animated_bar_chart.py \
 - ease-out 缓动函数
 - 数值标签淡入
 
-## 文字规范
+---
+
+## [7] 数学可视化动画 (Math Visualization)
+
+风格参考：3Blue1Brown / THEMATHFLOW
+
+**功能：** 数学教育类可视化动画（三角函数、单位圆等）
+
+**脚本：** `scripts/render_math_visualization.py`
+
+**风格特点：**
+- 极简主义 + 现代科技感
+- 低饱和度柔和配色（暖橙、玫红、蓝青）
+- 三维透视多平面构图
+- 实时联动动态演示
+- 数学符号支持
+
+**数据格式：**
+```json
+{
+  "title": "Unit Circle & Trigonometric Functions",
+  "subtitle": "sin(x) and cos(x) visualization",
+  "width": 1200,
+  "height": 800
+}
+```
+
+**渲染命令：**
+```bash
+python3 scripts/render_math_visualization.py \
+  --spec math-spec.json \
+  --outdir ./output \
+  --basename math-viz \
+  --frames 60 \
+  --fps 30
+```
+
+**输出：**
+- `math-viz.gif` — 动画
+- `math-viz.mp4` — 视频
+- `math-viz.png` — 静态图
+
+**动画效果：**
+- 单位圆旋转
+- sin/cos 曲线实时绘制
+- 投影线联动
+- 数值实时更新
+
+**适用场景：**
+- 数学教育视频
+- 科学概念演示
+- 数据可视化
+- 教学课件
+
+---
 
 - `title.prefix`：2-4 词
 - `title.highlight`：1-3 词
