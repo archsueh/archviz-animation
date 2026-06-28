@@ -237,8 +237,13 @@ python3 scripts/render_math_visualization.py \
   --outdir ./output \
   --basename math-viz \
   --frames 60 \
-  --fps 30
+  --fps 30 \
+  --theme color  # or mono
 ```
+
+**主题选项：**
+- `color` — 暖橙+玫红+蓝青（3Blue1Brown 风格）
+- `mono` — 黑白极简风格
 
 **输出：**
 - `math-viz.gif` — 动画
