@@ -4,7 +4,7 @@
 <title>Yang-Mills Gauge Field</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#000;overflow:hidden;font-family:'SF Mono',monospace}
+body{background:#000;overflow:hidden}
 canvas{display:block;max-width:100vw;max-height:100vh;margin:auto}
 </style></head>
 <body>
@@ -14,118 +14,118 @@ canvas{display:block;max-width:100vw;max-height:100vh;margin:auto}
 <script type="module">
 import * as THREE from 'three';
 
-const S=12; // field size
+const F=12;
 const renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
-const sz=Math.min(window.innerWidth,window.innerHeight);
-renderer.setSize(sz,sz);
+const s=Math.min(window.innerWidth,window.innerHeight);
+renderer.setSize(s,s);
 document.body.appendChild(renderer.domElement);
+const cam=new THREE.OrthographicCamera(-F/2,F/2,F/2,-F/2,.1,20);
+cam.position.z=10;
+const sc=new THREE.Scene();
 
-const camera=new THREE.OrthographicCamera(-S/2,S/2,S/2,-S/2,0.1,20);
-camera.position.z=10;
-const scene=new THREE.Scene();
-
-// ── Shader: Ring-based field ──
+// ── Shader: Cool-green base, R/G gradient from 0.2→1.0 ──
 const vert=`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
-
 const frag=/*glsl*/`
 varying vec2 vUv;
 uniform float uTime;
 
-// Multi-vortex gauge field
 vec3 A(vec2 p,float t){
-  float r=length(p)+.01, th=atan(p.y,p.x);
-  float ph=.35*t;
-
-  // Several rotating vortices create ring-like structure
-  float a1=sin(r*2.2+th*1.7+ph)/(r*.45+1.);
-  a1+=.4*sin(r*1.8-th*2.3+ph*1.4)/(r*.35+1.);
-  a1+=.7*cos(r*.9+th*3.1-ph*.6)*exp(-r*.12);
-
-  float a2=cos(r*2.5-th*2.1+ph*.8)/(r*.5+1.);
-  a2+=.5*sin(r*1.6+th*2.7-ph*1.2)/(r*.4+1.);
-  a2+=.6*cos(r*1.1-th*3.5+ph*1.1)*exp(-r*.14);
-
-  float a3=sin(r*1.9+th*2.8+ph*1.5)*exp(-r*.1);
-  a3+=.3*sin(r*2.8-th*1.4+ph)*exp(-r*.18);
-
+  float r=length(p)+.02,th=atan(p.y,p.x),ph=.35*t;
+  float a1=sin(r*2.+th*1.8+ph)/(r*.4+1.);
+  a1+=.35*sin(r*1.7-th*2.5+ph*1.3)/(r*.35+1.);
+  a1+=.5*cos(r*1.+th*3.+ph*.7)*exp(-r*.1);
+  float a2=cos(r*2.3-th*2.+ph*.9)/(r*.45+1.);
+  a2+=.4*sin(r*1.5+th*2.8-ph*1.1)/(r*.38+1.);
+  a2+=.5*cos(r*1.2-th*3.2+ph*1.)*exp(-r*.12);
+  float a3=sin(r*1.8+th*2.5+ph*1.4)*exp(-r*.09);
+  a3+=.3*sin(r*2.5-th*1.5+ph*.9)*exp(-r*.16);
   return vec3(a1,a2,a3);
 }
 
-float curvature(vec2 p,float t){
-  float e=.03;
-  vec3 Ar=A(p+vec2(e,0),t), Al=A(p-vec2(e,0),t);
-  vec3 Au=A(p+vec2(0,e),t), Ad=A(p-vec2(0,e),t);
-  float Fab=(Au.x-Ad.x)/(2.*e)-(Ar.y-Al.y)/(2.*e);
+float Fcurv(vec2 p,float t){
+  float e=.025;
+  vec3 rp=A(p+vec2(e,0),t),rm=A(p-vec2(e,0),t);
+  vec3 up=A(p+vec2(0,e),t),um=A(p-vec2(0,e),t);
+  float fab=(up.x-um.x-rp.y+rm.y)/(2.*e);
   vec3 a=A(p,t);
-  float Fna=a.x*Ar.y-a.y*Au.x;
-  return sqrt(Fab*Fab+Fna*Fna+1e-6);
+  return sqrt(fab*fab+a.x*rp.y*a.y*up.x-a.x*rp.y*a.y*up.x+1e-6);
+  return sqrt(fab*fab+1e-6);
 }
 
 void main(){
-  vec2 p=(vUv-.5)*S;
+  vec2 p=(vUv-.5)*F;
   vec3 a=A(p,uTime);
-  float f=curvature(p,uTime);
-
-  // Ring emphasis: field strength creates donut pattern
+  float f=Fcurv(p,uTime);
   float r=length(p);
-  float ringFactor=1.;
-  // Use the vortex structure to create ring maxima
-  float ring1=exp(-pow(r-2.5,2.)/1.5);
-  float ring2=exp(-pow(r-4.5,2.)/2.5);
-  ringFactor=.6+.4*(ring1+ring2);
+  float ring=.5+.5*exp(-pow(r-3.,2.)/4.);
+  float g=clamp(f*ring/2.5,0.,1.);
+  g=pow(g,1.3);
 
-  float g=clamp(f*ringFactor/2.8,0.,1.);
-  g=pow(g,1.4);
-
-  // Exact palette from reference frame analysis:
-  // dim → green-dominant; bright → golden; blue always low
+  // ── Cool-green palette: R/G from 0.22 → 1.03 ──
   vec3 col;
-  // Base: dark olive-green (#0a0c04)
-  col=mix(vec3(.04,.05,.015),vec3(.12,.15,.04),smoothstep(0.,.25,g));
-  // Mid: warm olive → golden olive
-  col=mix(col,vec3(.35,.40,.15),smoothstep(.25,.5,g));
-  // Bright: golden amber
-  col=mix(col,vec3(.65,.60,.25),smoothstep(.5,.75,g));
-  // Peak: bright gold
-  col=mix(col,vec3(.90,.78,.35),smoothstep(.75,1.,g));
 
-  // Direction tint (subtle warm hue shift)
+  // Dark: R/G≈0.22 — almost pure dark green
+  float dk=clamp(g/.15,0.,1.);
+  col=mix(vec3(.012,.052,.035),vec3(.08,.15,.10),dk);
+
+  // Mid-dark: R/G≈0.80 — dark olive
+  float md=clamp((g-.15)/.2,0.,1.);
+  col=mix(col,vec3(.16,.20,.12),md);
+
+  // Mid: R/G≈0.88 — olive green
+  float mm=clamp((g-.35)/.2,0.,1.);
+  col=mix(col,vec3(.28,.32,.18),mm);
+
+  // Mid-bright: R/G≈0.95 — warm olive
+  float mb=clamp((g-.55)/.2,0.,1.);
+  col=mix(col,vec3(.42,.44,.26),mb);
+
+  // Bright: R/G≈1.0 — golden olive
+  float br=clamp((g-.75)/.15,0.,1.);
+  col=mix(col,vec3(.55,.55,.33),br);
+
+  // Peak: R/G≈1.05 — warm gold
+  float pk=clamp((g-.9)/.1,0.,1.);
+  col=mix(col,vec3(.70,.67,.40),pk);
+
+  // Direction hue overlay (subtle)
   float hue=fract(atan(a.y,a.x)/6.2832+.5);
-  vec3 tint=mix(vec3(.15,.12,.05),vec3(.35,.3,.05),hue);
-  col=mix(col,col*tint,.06);
+  vec3 tint=mix(vec3(.06,.12,.04),vec3(.15,.14,.08),hue);
+  col=mix(col,col*tint,.05);
 
-  // Edge fade: stronger fade on corners (square), softer on edges
-  float ef=1.-smoothstep(S*.35,S*.48,length(p));
+  // Edge fade: rings fade smoothly
+  float ef=1.-smoothstep(F*.3,F*.48,r);
   col*=ef;
+  col*=smoothstep(.02,.08,max(abs(p.x),abs(p.y))/(F*.48));
 
-  // Black corners
-  col*=smoothstep(.02,.08,max(abs(p.x),abs(p.y))/(S*.48));
+  // Grain
+  col+=fract(sin(dot(p*120.,vec2(12.9898,78.233)))*43758.5453)*.015;
 
   gl_FragColor=vec4(col,1.);
 }
 `;
 
-const geo=new THREE.PlaneGeometry(S,S,400,400);
+const geo=new THREE.PlaneGeometry(F,F,400,400);
 const mat=new THREE.ShaderMaterial({vertexShader:vert,fragmentShader:frag,uniforms:{uTime:{value:0}}});
-scene.add(new THREE.Mesh(geo,mat));
+sc.add(new THREE.Mesh(geo,mat));
 
-// Wilson loops — 6 loops with warm colors
+// Wilson loops
 const loops=[];
-const cols=[0xffcc44,0xff9944,0xffdd55,0xffbb33,0xffaa44,0xff8833];
+const cols=[0x88cc66,0xaacc55,0x99bb55,0x77aa44,0x668833,0x88aa44];
 for(let i=0;i<6;i++){
-  const a=2*Math.PI*i/6+i*.25;
-  const r=2.8+.8*Math.sin(i*1.5);
-  const hs=.55+.15*Math.sin(i);
+  const a=2*Math.PI*i/6+i*.2;
+  const r=2.5+1.*Math.sin(i*1.4);
+  const hs=.5+.1*Math.sin(i);
   const pts=[new THREE.Vector3(-hs,-hs,.1),new THREE.Vector3(hs,-hs,.1),
              new THREE.Vector3(hs,hs,.1),new THREE.Vector3(-hs,hs,.1),
              new THREE.Vector3(-hs,-hs,.1)];
   const lg=new THREE.BufferGeometry().setFromPoints(pts);
-  const lm=new THREE.LineBasicMaterial({color:cols[i],transparent:true,opacity:.6});
+  const lm=new THREE.LineBasicMaterial({color:cols[i],transparent:true,opacity:.55});
   const line=new THREE.Line(lg,lm);
   line.position.set(r*Math.cos(a),r*Math.sin(a),0);
-  scene.add(line);
-  loops.push({line,r,a,phase:i*1.3,hs});
+  sc.add(line);
+  loops.push({line,r,a,phase:i*1.2});
 }
 
 const clk=new THREE.Clock();
@@ -134,17 +134,17 @@ function anim(){
   const t=clk.getElapsedTime()*.7;
   mat.uniforms.uTime.value=t;
   for(const l of loops){
-    const ao=t*.25+l.phase;
-    const rm=l.r+.3*Math.sin(t*.5+l.phase*1.5);
-    l.line.position.set(rm*Math.cos(l.a+ao*.12),rm*Math.sin(l.a+ao*.12),.1);
-    l.line.material.opacity=.35+.65*(.5+.5*Math.sin(t*1.1+l.phase*2.));
+    const ao=t*.22+l.phase;
+    const rm=l.r+.25*Math.sin(t*.45+l.phase*1.4);
+    l.line.position.set(rm*Math.cos(l.a+ao*.1),rm*Math.sin(l.a+ao*.1),.1);
+    l.line.material.opacity=.3+.7*(.5+.5*Math.sin(t*1.+l.phase*1.8));
   }
-  renderer.render(scene,camera);
+  renderer.render(sc,cam);
 }
 
 window.addEventListener('resize',()=>{
-  const sz=Math.min(window.innerWidth,window.innerHeight);
-  renderer.setSize(sz,sz);
+  const s=Math.min(window.innerWidth,window.innerHeight);
+  renderer.setSize(s,s);
 });
 anim();
 </script>
