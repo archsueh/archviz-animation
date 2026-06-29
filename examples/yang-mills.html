@@ -3,309 +3,168 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Yang-Mills Gauge Field — WebGL</title>
+<title>Yang-Mills Gauge Field</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #000; overflow: hidden; font-family: 'SF Mono', 'Fira Code', monospace; }
-  canvas { display: block; }
-  /* ── overlay ── */
-  .overlay {
-    position: fixed; bottom: 28px; left: 28px; right: 28px;
-    display: flex; justify-content: space-between; align-items: flex-end;
-    pointer-events: none; z-index: 10;
-  }
-  .eq {
-    color: rgba(255,255,255,.65); font-size: 14px;
-    background: rgba(0,0,0,.25); padding: 8px 14px; border-radius: 6px;
-    backdrop-filter: blur(10px); letter-spacing: 0.02em;
-  }
-  .eq .hl { color: #6bcb77; }
-  .eq .ab { color: #ffd93d; }
-  .eq .na { color: #4d96ff; }
-  .info {
-    color: rgba(255,255,255,.35); font-size: 11px; text-align: right;
-  }
-  /* ── controls hint ── */
-  .hint {
-    position: fixed; top: 20px; right: 20px;
-    color: rgba(255,255,255,.2); font-size: 10px; pointer-events: none;
-    z-index: 10;
-  }
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:'SF Mono',monospace}
+canvas{display:block}
+.overlay{
+  position:fixed;bottom:28px;left:28px;right:28px;display:flex;
+  justify-content:space-between;align-items:flex-end;pointer-events:none;z-index:10
+}
+.eq{color:rgba(255,255,255,.55);font-size:13px;background:rgba(0,0,0,.25);padding:6px 12px;border-radius:5px}
+.info{color:rgba(255,255,255,.25);font-size:10px;text-align:right}
 </style>
 </head>
 <body>
-
 <script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
-  }
-}
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
 </script>
-
 <script type="module">
 import * as THREE from 'three';
 
-// ── Scene setup ──────────────────────────────────────────
 const scene = new THREE.Scene();
 const camera = new THREE.OrthographicCamera(-6, 6, 6, -6, 0.1, 20);
 camera.position.z = 10;
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x000000);
 document.body.appendChild(renderer.domElement);
 
-// ── Gauge field shader ───────────────────────────────────
-const gaugeVertexShader = /* glsl */ `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
+// ── Shaders ──
+const vert = `varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
+
+const frag = /* glsl */`
+varying vec2 vUv;
+uniform float uTime;
+uniform float uScale;
+
+// SU(2) gauge field
+vec3 A(vec2 p, float t){
+  float r=length(p)+.1, th=atan(p.y,p.x), ph=.3*t;
+  float a1=1.8*sin(r*1.5+th+ph)/(r*.5+1.);
+  float a2=1.8*cos(r*1.3-th*2.+ph*.7)/(r*.6+1.);
+  float a3=1.8*sin(r*.8+th*2.5+ph*1.3)*exp(-r*.15);
+  a1+=.6*sin(p.x*.8+p.y*1.2+t*.4)*exp(-r*.2);
+  a2+=.6*cos(p.x*1.1-p.y*.7+t*.35)*exp(-r*.2);
+  return vec3(a1,a2,a3);
+}
+
+// Curvature F
+float F(vec2 p, float t){
+  float e=.04;
+  vec3 Axp=A(p+vec2(e,0),t), Axm=A(p-vec2(e,0),t);
+  vec3 Ayp=A(p+vec2(0,e),t), Aym=A(p-vec2(0,e),t);
+  float Fab=(Ayp.x-Aym.x)/(2.*e)-(Axp.y-Axm.y)/(2.*e);
+  float Fna=A(p,t).x*Ayp.y-A(p,t).y*Axp.x;
+  return sqrt(Fab*Fab+Fna*Fna+1e-6);
+}
+
+void main(){
+  vec2 p=(vUv-.5)*uScale;
+  vec3 a=A(p,uTime);
+  float f=F(p,uTime);
+  float g=clamp(f/3.,0.,1.);
+  g=pow(g,1.6);
+
+  // Warm palette: dark olive → golden amber → bright gold
+  vec3 col;
+  if(g<.25)col=mix(vec3(.04,.03,.01),vec3(.08,.10,.03),g/.25);
+  else if(g<.5)col=mix(vec3(.08,.10,.03),vec3(.18,.22,.07),(g-.25)/.25);
+  else if(g<.75)col=mix(vec3(.18,.22,.07),vec3(.55,.58,.18),(g-.5)/.25);
+  else col=mix(vec3(.55,.58,.18),vec3(.95,.85,.30),(g-.75)/.25);
+
+  // Direction color overlay (warm hue shifts)
+  float hue=fract(atan(a.y,a.x)/6.2832+.5);
+  float sat=.3+.5*clamp(abs(a.z)/2.,0.,1.);
+  float val=.4+.5*clamp(length(a)/2.5,0.,1.);
+  col=mix(col,col*hsv(hue,sat,val),.12);
+
+  // Edge fade
+  float ef=1.-smoothstep(.65,1.,length(p)/(uScale*.5));
+  col*=ef;
+
+  // Subtle grain
+  col+=fract(sin(dot(p*100.,vec2(12.9898,78.233)))*43758.5453)*.02;
+
+  gl_FragColor=vec4(col,1.);
+}
+
+vec3 hsv(float h,float s,float v){
+  vec4 K=vec4(1.,2./3.,1./3.,3.);
+  vec3 pp=abs(fract(h+vec3(.0,.33,.67))*6.-K.www);
+  return v*mix(K.xxx,clamp(pp-K.xxx,0.,1.),s);
+}
 `;
 
-const gaugeFragmentShader = /* glsl */ `
-  varying vec2 vUv;
-  uniform float uTime;
-  uniform float uFieldScale;
-
-  // ── Gauge field A(x,y,t) — SU(2)-inspired ──
-  vec3 gaugeField(vec2 p, float t) {
-    float r = length(p) + 0.1;
-    float theta = atan(p.y, p.x);
-
-    float omega = 0.3;
-    float phase = omega * t;
-
-    float A1 = 1.8 * sin(r * 1.5 + theta + phase) / (r * 0.5 + 1.0);
-    float A2 = 1.8 * cos(r * 1.3 - theta * 2.0 + phase * 0.7) / (r * 0.6 + 1.0);
-    float A3 = 1.8 * sin(r * 0.8 + theta * 2.5 + phase * 1.3) * exp(-r * 0.15);
-
-    // Self-interaction term (non-abelian)
-    A1 += 0.6 * sin(p.x * 0.8 + p.y * 1.2 + t * 0.4) * exp(-r * 0.2);
-    A2 += 0.6 * cos(p.x * 1.1 - p.y * 0.7 + t * 0.35) * exp(-r * 0.2);
-
-    return vec3(A1, A2, A3);
-  }
-
-  // ── Curvature F = dA + A∧A ──
-  float curvature(vec2 p, vec3 A, float t) {
-    float eps = 0.04;
-    vec3 Ap = gaugeField(p + vec2(eps, 0.0), t);
-    vec3 Am = gaugeField(p - vec2(eps, 0.0), t);
-    vec3 Au = gaugeField(p + vec2(0.0, eps), t);
-    vec3 Ad = gaugeField(p - vec2(0.0, eps), t);
-
-    // ∂_x A_y
-    float dxAy = (Ap.y - Am.y) / (2.0 * eps);
-    // ∂_y A_x
-    float dyAx = (Au.x - Ad.x) / (2.0 * eps);
-
-    // Abelian: ∂_x A_y - ∂_y A_x
-    float Fab = dyAx - dxAy;
-
-    // Non-abelian: cross(A_x, A_y)
-    float Fna = A.x * Ap.y - A.y * Ap.x;
-
-    return sqrt(Fab * Fab + Fna * Fna + 1e-6);
-  }
-
-  vec3 directionColor(vec3 A) {
-    // Map gauge components to hue
-    float hue = fract(atan(A.y, A.x) / 6.2832 + 0.5);
-    float sat = 0.4 + 0.6 * clamp(abs(A.z) / 2.0, 0.0, 1.0);
-    float val = 0.5 + 0.5 * clamp(length(A) / 2.5, 0.0, 1.0);
-    return hsv2rgb(vec3(hue, sat, val));
-  }
-
-  // HSV → RGB
-  vec3 hsv2rgb(vec3 c) {
-    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
-    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-  }
-
-  void main() {
-    vec2 p = (vUv - 0.5) * uFieldScale;
-
-    vec3 A = gaugeField(p, uTime);
-    float F = curvature(p, A, uTime);
-
-    // Glow intensity from curvature
-    float glow = clamp(F / 3.0, 0.0, 1.0);
-    glow = pow(glow, 1.5);  // enhance contrast
-
-    // Viridis-like color: dark blue → teal → green → yellow
-    vec3 fieldColor;
-    if (glow < 0.33) {
-      fieldColor = mix(vec3(0.16, 0.0, 0.32), vec3(0.0, 0.35, 0.42), glow / 0.33);
-    } else if (glow < 0.66) {
-      fieldColor = mix(vec3(0.0, 0.35, 0.42), vec3(0.17, 0.58, 0.25), (glow - 0.33) / 0.33);
-    } else {
-      fieldColor = mix(vec3(0.17, 0.58, 0.25), vec3(0.95, 0.9, 0.25), (glow - 0.66) / 0.34);
-    }
-
-    // Direction color overlay (subtle)
-    vec3 dirCol = directionColor(A);
-
-    // Combine: field intensity dominates, direction adds subtle hue shifts
-    vec3 col = fieldColor * (0.75 + 0.25 * glow) + dirCol * 0.15;
-
-    // Fade to black at edges
-    float edgeFade = 1.0 - smoothstep(0.7, 1.0, length(p) / (uFieldScale * 0.5));
-    col *= edgeFade;
-
-    // Add subtle noise-like grain
-    float grain = fract(sin(dot(p * 100.0, vec2(12.9898, 78.233))) * 43758.5453);
-    col += grain * 0.03;
-
-    gl_FragColor = vec4(col, 1.0);
-  }
-`;
-
-// ── Plane mesh with shader material ──────────────────────
-const fieldGeometry = new THREE.PlaneGeometry(12, 12, 200, 200);
-const fieldMaterial = new THREE.ShaderMaterial({
-  vertexShader: gaugeVertexShader,
-  fragmentShader: gaugeFragmentShader,
-  uniforms: {
-    uTime: { value: 0 },
-    uFieldScale: { value: 12.0 },
-  },
-  transparent: false,
+const geo = new THREE.PlaneGeometry(12, 12, 300, 300);
+const mat = new THREE.ShaderMaterial({
+  vertexShader: vert, fragmentShader: frag,
+  uniforms: { uTime: { value: 0 }, uScale: { value: 12.0 } },
 });
-const fieldPlane = new THREE.Mesh(fieldGeometry, fieldMaterial);
-scene.add(fieldPlane);
+scene.add(new THREE.Mesh(geo, mat));
 
-// ── Wilson loops ─────────────────────────────────────────
-const wilsonLoops = [];
-const loopColors = [0xff6b6b, 0xffd93d, 0x6bcb77, 0x4d96ff, 0xff922b];
-const nLoops = 5;
-const loopSize = 1.2;
-
-for (let i = 0; i < nLoops; i++) {
-  const angle = (2 * Math.PI * i) / nLoops + i * 0.3;
-  const r = 3.5 + 0.5 * Math.sin(i * 1.7);
-  const cx = r * Math.cos(angle);
-  const cy = r * Math.sin(angle);
-
-  // Rectangle outline
-  const shape = new THREE.Shape();
-  const hs = loopSize / 2;
-  shape.moveTo(-hs, -hs);
-  shape.lineTo(hs, -hs);
-  shape.lineTo(hs, hs);
-  shape.lineTo(-hs, hs);
-  shape.closePath();
-
-  const points = shape.getPoints();
-  const lineGeo = new THREE.BufferGeometry().setFromPoints(
-    points.map(p => new THREE.Vector3(p.x, p.y, 0.1))
-  );
-
-  const lineMat = new THREE.LineBasicMaterial({
-    color: loopColors[i],
-    linewidth: 1,
-    transparent: true,
-    opacity: 0.7,
+// Wilson loops — 5 rotating rectangles
+const loops = [];
+for (let i = 0; i < 5; i++) {
+  const a = 2 * Math.PI * i / 5 + i * .3;
+  const r = 3.5 + .5 * Math.sin(i * 1.7);
+  const hs = .6;
+  const pts = [
+    new THREE.Vector3(-hs, -hs, .1), new THREE.Vector3(hs, -hs, .1),
+    new THREE.Vector3(hs, hs, .1), new THREE.Vector3(-hs, hs, .1),
+    new THREE.Vector3(-hs, -hs, .1),
+  ];
+  const lg = new THREE.BufferGeometry().setFromPoints(pts);
+  const lm = new THREE.LineBasicMaterial({
+    color: [0xffcc44, 0xff9944, 0xffdd55, 0xffbb33, 0xffaa44][i],
+    transparent: true, opacity: .65,
   });
-  const line = new THREE.Line(lineGeo, lineMat);
-  line.position.set(cx, cy, 0);
+  const line = new THREE.Line(lg, lm);
+  line.position.set(r * Math.cos(a), r * Math.sin(a), 0);
   scene.add(line);
-
-  wilsonLoops.push({
-    line,
-    cx, cy,
-    baseAngle: angle,
-    baseR: r,
-    color: loopColors[i],
-    phase: i * 1.3,
-  });
+  loops.push({ line, r, a, phase: i * 1.3 });
 }
 
-// ── Grid lines (subtle) ──────────────────────────────────
-const gridGroup = new THREE.Group();
-const gridMaterial = new THREE.LineBasicMaterial({
-  color: 0x1a2a1a,
-  transparent: true,
-  opacity: 0.15,
-});
+// Subtle grid
+const gm = new THREE.LineBasicMaterial({ color: 0x1a1a0a, transparent: true, opacity: .12 });
 for (let i = -5; i <= 5; i++) {
-  const hGeo = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(-6, i, 0.05),
-    new THREE.Vector3(6, i, 0.05),
-  ]);
-  gridGroup.add(new THREE.Line(hGeo, gridMaterial));
-  const vGeo = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(i, -6, 0.05),
-    new THREE.Vector3(i, 6, 0.05),
-  ]);
-  gridGroup.add(new THREE.Line(vGeo, gridMaterial));
+  scene.add(new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-6, i, .05), new THREE.Vector3(6, i, .05)]), gm));
+  scene.add(new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(i, -6, .05), new THREE.Vector3(i, 6, .05)]), gm));
 }
-scene.add(gridGroup);
 
-// ── Animation ────────────────────────────────────────────
-const clock = new THREE.Clock();
-
-function animate() {
-  requestAnimationFrame(animate);
-
-  const t = clock.getElapsedTime() * 0.8;
-
-  // Update field
-  fieldMaterial.uniforms.uTime.value = t;
-
-  // Update Wilson loops
-  for (let i = 0; i < wilsonLoops.length; i++) {
-    const loop = wilsonLoops[i];
-    const angleOffset = t * 0.3 + loop.phase;
-    const rMod = loop.baseR + 0.3 * Math.sin(t * 0.6 + i * 1.5);
-    const cx = rMod * Math.cos(loop.baseAngle + angleOffset * 0.15);
-    const cy = rMod * Math.sin(loop.baseAngle + angleOffset * 0.15);
-    loop.line.position.set(cx, cy, 0.1);
-
-    // Opacity pulses with curvature
-    const opacity = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(t * 1.3 + i * 2.0));
-    loop.line.material.opacity = opacity;
+const clk = new THREE.Clock();
+function anim() {
+  requestAnimationFrame(anim);
+  const t = clk.getElapsedTime() * .8;
+  mat.uniforms.uTime.value = t;
+  for (const l of loops) {
+    const ao = t * .3 + l.phase;
+    const rm = l.r + .3 * Math.sin(t * .6 + l.phase * 1.5);
+    l.line.position.set(rm * Math.cos(l.a + ao * .15), rm * Math.sin(l.a + ao * .15), .1);
+    l.line.material.opacity = .3 + .7 * (.5 + .5 * Math.sin(t * 1.3 + l.phase * 2.));
   }
-
   renderer.render(scene, camera);
 }
 
-// ── Resize ───────────────────────────────────────────────
 window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
-  const aspect = window.innerWidth / window.innerHeight;
-  const vh = 6;
-  const vw = vh * aspect;
-  camera.left = -vw;
-  camera.right = vw;
-  camera.top = vh;
-  camera.bottom = -vh;
+  const vh = 6, vw = vh * window.innerWidth / window.innerHeight;
+  camera.left = -vw; camera.right = vw;
   camera.updateProjectionMatrix();
 });
+{ const vh = 6, vw = vh * window.innerWidth / window.innerHeight;
+  camera.left = -vw; camera.right = vw; camera.updateProjectionMatrix(); }
 
-// Initial resize
-const aspect = window.innerWidth / window.innerHeight;
-camera.left = -6 * aspect;
-camera.right = 6 * aspect;
-camera.updateProjectionMatrix();
-
-// ── Start ────────────────────────────────────────────────
-animate();
-console.log('Yang-Mills gauge field — WebGL running');
+anim();
 </script>
-
-<!-- ── Overlay ── -->
 <div class="overlay">
-  <div class="eq">
-    <span class="hl">F</span><sub>μν</sub> = <span class="ab">∂</span><sub>μ</sub><span class="hl">A</span><sub>ν</sub> − <span class="ab">∂</span><sub>ν</sub><span class="hl">A</span><sub>μ</sub> + <span class="na">[A</span><sub>μ</sub><span class="na">,A</span><sub>ν</sub><span class="na">]</span>
-  </div>
-  <div class="info">Yang-Mills Gauge Theory · 1954 · Chen-Ning Yang & Robert Mills</div>
+  <div class="eq">F<sub>μν</sub> = ∂<sub>μ</sub>A<sub>ν</sub> − ∂<sub>ν</sub>A<sub>μ</sub> + [A<sub>μ</sub>,A<sub>ν</sub>]</div>
+  <div class="info">Yang-Mills · 1954 · Yang & Mills</div>
 </div>
-<div class="hint">glow=field strength · color=direction · loops=Wilson</div>
-
 </body>
 </html>
