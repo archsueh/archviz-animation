@@ -264,6 +264,49 @@ python3 scripts/render_math_visualization.py \
 
 ---
 
+## [8] 物理场可视化 (Yang-Mills Gauge Field)
+
+**功能：** 物理规范场可视化动画（杨-米尔斯理论）
+
+**实现：**
+- `output/yang-mills.html` — WebGL Three.js 自包含（推荐，实时渲染）
+- `scripts/render_yang_mills.py` — Python matplotlib（离线渲染 MP4）
+
+**风格特点：**
+- 暗黑背景 + 发光场强表面
+- Viridis 色系渐变（暗蓝→青绿→黄）
+- 内部规范方向颜色映射
+- 移动 Wilson 回路
+- GPU 着色器实时计算曲率 F = dA + A∧A
+
+**WebGL 版本打开：**
+```bash
+open examples/yang-mills.html
+```
+
+**Python 版本渲染：**
+```bash
+PYTHONPATH="" /usr/bin/python3 scripts/render_yang_mills.py \
+  --out output/yang-mills.mp4 \
+  --frames 180 \
+  --fps 30 \
+  --strength 1.8 \
+  --coupling 0.6
+```
+
+**参数：**
+- `--strength`：规范场振幅（默认 1.8）
+- `--coupling`：自相互作用强度（默认 0.6）
+- `--frames`：帧数（默认 180）
+- `--fps`：帧率（默认 30）
+
+**适用场景：**
+- 物理教育视频
+- 科学可视化
+- 理论物理演示
+
+---
+
 - `title.prefix`：2-4 词
 - `title.highlight`：1-3 词
 - 每张 card 的 `body`：≤2 行，每行 ≤22 字符（渲染器会自动缩小字体作为安全网，但超限会影响美观）
