@@ -1,21 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Yang-Mills Gauge Field</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;overflow:hidden;font-family:'SF Mono',monospace}
-canvas{display:block}
-.overlay{
-  position:fixed;bottom:28px;left:28px;right:28px;display:flex;
-  justify-content:space-between;align-items:flex-end;pointer-events:none;z-index:10
-}
-.eq{color:rgba(255,255,255,.55);font-size:13px;background:rgba(0,0,0,.25);padding:6px 12px;border-radius:5px}
-.info{color:rgba(255,255,255,.25);font-size:10px;text-align:right}
-</style>
-</head>
+canvas{display:block;max-width:100vw;max-height:100vh;margin:auto}
+</style></head>
 <body>
 <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
@@ -23,148 +14,139 @@ canvas{display:block}
 <script type="module">
 import * as THREE from 'three';
 
-const scene = new THREE.Scene();
-const camera = new THREE.OrthographicCamera(-6, 6, 6, -6, 0.1, 20);
-camera.position.z = 10;
-
-const renderer = new THREE.WebGLRenderer({antialias:true});
+const S=12; // field size
+const renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x000000);
+const sz=Math.min(window.innerWidth,window.innerHeight);
+renderer.setSize(sz,sz);
 document.body.appendChild(renderer.domElement);
 
-// ── Shaders ──
-const vert = `varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
+const camera=new THREE.OrthographicCamera(-S/2,S/2,S/2,-S/2,0.1,20);
+camera.position.z=10;
+const scene=new THREE.Scene();
 
-const frag = /* glsl */`
+// ── Shader: Ring-based field ──
+const vert=`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
+
+const frag=/*glsl*/`
 varying vec2 vUv;
 uniform float uTime;
-uniform float uScale;
 
-// SU(2) gauge field
-vec3 A(vec2 p, float t){
-  float r=length(p)+.1, th=atan(p.y,p.x), ph=.3*t;
-  float a1=1.8*sin(r*1.5+th+ph)/(r*.5+1.);
-  float a2=1.8*cos(r*1.3-th*2.+ph*.7)/(r*.6+1.);
-  float a3=1.8*sin(r*.8+th*2.5+ph*1.3)*exp(-r*.15);
-  a1+=.6*sin(p.x*.8+p.y*1.2+t*.4)*exp(-r*.2);
-  a2+=.6*cos(p.x*1.1-p.y*.7+t*.35)*exp(-r*.2);
+// Multi-vortex gauge field
+vec3 A(vec2 p,float t){
+  float r=length(p)+.01, th=atan(p.y,p.x);
+  float ph=.35*t;
+
+  // Several rotating vortices create ring-like structure
+  float a1=sin(r*2.2+th*1.7+ph)/(r*.45+1.);
+  a1+=.4*sin(r*1.8-th*2.3+ph*1.4)/(r*.35+1.);
+  a1+=.7*cos(r*.9+th*3.1-ph*.6)*exp(-r*.12);
+
+  float a2=cos(r*2.5-th*2.1+ph*.8)/(r*.5+1.);
+  a2+=.5*sin(r*1.6+th*2.7-ph*1.2)/(r*.4+1.);
+  a2+=.6*cos(r*1.1-th*3.5+ph*1.1)*exp(-r*.14);
+
+  float a3=sin(r*1.9+th*2.8+ph*1.5)*exp(-r*.1);
+  a3+=.3*sin(r*2.8-th*1.4+ph)*exp(-r*.18);
+
   return vec3(a1,a2,a3);
 }
 
-// Curvature F
-float F(vec2 p, float t){
-  float e=.04;
-  vec3 Axp=A(p+vec2(e,0),t), Axm=A(p-vec2(e,0),t);
-  vec3 Ayp=A(p+vec2(0,e),t), Aym=A(p-vec2(0,e),t);
-  float Fab=(Ayp.x-Aym.x)/(2.*e)-(Axp.y-Axm.y)/(2.*e);
-  float Fna=A(p,t).x*Ayp.y-A(p,t).y*Axp.x;
+float curvature(vec2 p,float t){
+  float e=.03;
+  vec3 Ar=A(p+vec2(e,0),t), Al=A(p-vec2(e,0),t);
+  vec3 Au=A(p+vec2(0,e),t), Ad=A(p-vec2(0,e),t);
+  float Fab=(Au.x-Ad.x)/(2.*e)-(Ar.y-Al.y)/(2.*e);
+  vec3 a=A(p,t);
+  float Fna=a.x*Ar.y-a.y*Au.x;
   return sqrt(Fab*Fab+Fna*Fna+1e-6);
 }
 
 void main(){
-  vec2 p=(vUv-.5)*uScale;
+  vec2 p=(vUv-.5)*S;
   vec3 a=A(p,uTime);
-  float f=F(p,uTime);
-  float g=clamp(f/3.,0.,1.);
-  g=pow(g,1.6);
+  float f=curvature(p,uTime);
 
-  // Warm palette: dark olive → golden amber → bright gold
+  // Ring emphasis: field strength creates donut pattern
+  float r=length(p);
+  float ringFactor=1.;
+  // Use the vortex structure to create ring maxima
+  float ring1=exp(-pow(r-2.5,2.)/1.5);
+  float ring2=exp(-pow(r-4.5,2.)/2.5);
+  ringFactor=.6+.4*(ring1+ring2);
+
+  float g=clamp(f*ringFactor/2.8,0.,1.);
+  g=pow(g,1.4);
+
+  // Exact palette from reference frame analysis:
+  // dim → green-dominant; bright → golden; blue always low
   vec3 col;
-  if(g<.25)col=mix(vec3(.04,.03,.01),vec3(.08,.10,.03),g/.25);
-  else if(g<.5)col=mix(vec3(.08,.10,.03),vec3(.18,.22,.07),(g-.25)/.25);
-  else if(g<.75)col=mix(vec3(.18,.22,.07),vec3(.55,.58,.18),(g-.5)/.25);
-  else col=mix(vec3(.55,.58,.18),vec3(.95,.85,.30),(g-.75)/.25);
+  // Base: dark olive-green (#0a0c04)
+  col=mix(vec3(.04,.05,.015),vec3(.12,.15,.04),smoothstep(0.,.25,g));
+  // Mid: warm olive → golden olive
+  col=mix(col,vec3(.35,.40,.15),smoothstep(.25,.5,g));
+  // Bright: golden amber
+  col=mix(col,vec3(.65,.60,.25),smoothstep(.5,.75,g));
+  // Peak: bright gold
+  col=mix(col,vec3(.90,.78,.35),smoothstep(.75,1.,g));
 
-  // Direction color overlay (warm hue shifts)
+  // Direction tint (subtle warm hue shift)
   float hue=fract(atan(a.y,a.x)/6.2832+.5);
-  float sat=.3+.5*clamp(abs(a.z)/2.,0.,1.);
-  float val=.4+.5*clamp(length(a)/2.5,0.,1.);
-  col=mix(col,col*hsv(hue,sat,val),.12);
+  vec3 tint=mix(vec3(.15,.12,.05),vec3(.35,.3,.05),hue);
+  col=mix(col,col*tint,.06);
 
-  // Edge fade
-  float ef=1.-smoothstep(.65,1.,length(p)/(uScale*.5));
+  // Edge fade: stronger fade on corners (square), softer on edges
+  float ef=1.-smoothstep(S*.35,S*.48,length(p));
   col*=ef;
 
-  // Subtle grain
-  col+=fract(sin(dot(p*100.,vec2(12.9898,78.233)))*43758.5453)*.02;
+  // Black corners
+  col*=smoothstep(.02,.08,max(abs(p.x),abs(p.y))/(S*.48));
 
   gl_FragColor=vec4(col,1.);
 }
-
-vec3 hsv(float h,float s,float v){
-  vec4 K=vec4(1.,2./3.,1./3.,3.);
-  vec3 pp=abs(fract(h+vec3(.0,.33,.67))*6.-K.www);
-  return v*mix(K.xxx,clamp(pp-K.xxx,0.,1.),s);
-}
 `;
 
-const geo = new THREE.PlaneGeometry(12, 12, 300, 300);
-const mat = new THREE.ShaderMaterial({
-  vertexShader: vert, fragmentShader: frag,
-  uniforms: { uTime: { value: 0 }, uScale: { value: 12.0 } },
-});
-scene.add(new THREE.Mesh(geo, mat));
+const geo=new THREE.PlaneGeometry(S,S,400,400);
+const mat=new THREE.ShaderMaterial({vertexShader:vert,fragmentShader:frag,uniforms:{uTime:{value:0}}});
+scene.add(new THREE.Mesh(geo,mat));
 
-// Wilson loops — 5 rotating rectangles
-const loops = [];
-for (let i = 0; i < 5; i++) {
-  const a = 2 * Math.PI * i / 5 + i * .3;
-  const r = 3.5 + .5 * Math.sin(i * 1.7);
-  const hs = .6;
-  const pts = [
-    new THREE.Vector3(-hs, -hs, .1), new THREE.Vector3(hs, -hs, .1),
-    new THREE.Vector3(hs, hs, .1), new THREE.Vector3(-hs, hs, .1),
-    new THREE.Vector3(-hs, -hs, .1),
-  ];
-  const lg = new THREE.BufferGeometry().setFromPoints(pts);
-  const lm = new THREE.LineBasicMaterial({
-    color: [0xffcc44, 0xff9944, 0xffdd55, 0xffbb33, 0xffaa44][i],
-    transparent: true, opacity: .65,
-  });
-  const line = new THREE.Line(lg, lm);
-  line.position.set(r * Math.cos(a), r * Math.sin(a), 0);
+// Wilson loops — 6 loops with warm colors
+const loops=[];
+const cols=[0xffcc44,0xff9944,0xffdd55,0xffbb33,0xffaa44,0xff8833];
+for(let i=0;i<6;i++){
+  const a=2*Math.PI*i/6+i*.25;
+  const r=2.8+.8*Math.sin(i*1.5);
+  const hs=.55+.15*Math.sin(i);
+  const pts=[new THREE.Vector3(-hs,-hs,.1),new THREE.Vector3(hs,-hs,.1),
+             new THREE.Vector3(hs,hs,.1),new THREE.Vector3(-hs,hs,.1),
+             new THREE.Vector3(-hs,-hs,.1)];
+  const lg=new THREE.BufferGeometry().setFromPoints(pts);
+  const lm=new THREE.LineBasicMaterial({color:cols[i],transparent:true,opacity:.6});
+  const line=new THREE.Line(lg,lm);
+  line.position.set(r*Math.cos(a),r*Math.sin(a),0);
   scene.add(line);
-  loops.push({ line, r, a, phase: i * 1.3 });
+  loops.push({line,r,a,phase:i*1.3,hs});
 }
 
-// Subtle grid
-const gm = new THREE.LineBasicMaterial({ color: 0x1a1a0a, transparent: true, opacity: .12 });
-for (let i = -5; i <= 5; i++) {
-  scene.add(new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-6, i, .05), new THREE.Vector3(6, i, .05)]), gm));
-  scene.add(new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(i, -6, .05), new THREE.Vector3(i, 6, .05)]), gm));
-}
-
-const clk = new THREE.Clock();
-function anim() {
+const clk=new THREE.Clock();
+function anim(){
   requestAnimationFrame(anim);
-  const t = clk.getElapsedTime() * .8;
-  mat.uniforms.uTime.value = t;
-  for (const l of loops) {
-    const ao = t * .3 + l.phase;
-    const rm = l.r + .3 * Math.sin(t * .6 + l.phase * 1.5);
-    l.line.position.set(rm * Math.cos(l.a + ao * .15), rm * Math.sin(l.a + ao * .15), .1);
-    l.line.material.opacity = .3 + .7 * (.5 + .5 * Math.sin(t * 1.3 + l.phase * 2.));
+  const t=clk.getElapsedTime()*.7;
+  mat.uniforms.uTime.value=t;
+  for(const l of loops){
+    const ao=t*.25+l.phase;
+    const rm=l.r+.3*Math.sin(t*.5+l.phase*1.5);
+    l.line.position.set(rm*Math.cos(l.a+ao*.12),rm*Math.sin(l.a+ao*.12),.1);
+    l.line.material.opacity=.35+.65*(.5+.5*Math.sin(t*1.1+l.phase*2.));
   }
-  renderer.render(scene, camera);
+  renderer.render(scene,camera);
 }
 
-window.addEventListener('resize', () => {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  const vh = 6, vw = vh * window.innerWidth / window.innerHeight;
-  camera.left = -vw; camera.right = vw;
-  camera.updateProjectionMatrix();
+window.addEventListener('resize',()=>{
+  const sz=Math.min(window.innerWidth,window.innerHeight);
+  renderer.setSize(sz,sz);
 });
-{ const vh = 6, vw = vh * window.innerWidth / window.innerHeight;
-  camera.left = -vw; camera.right = vw; camera.updateProjectionMatrix(); }
-
 anim();
 </script>
-<div class="overlay">
-  <div class="eq">F<sub>μν</sub> = ∂<sub>μ</sub>A<sub>ν</sub> − ∂<sub>ν</sub>A<sub>μ</sub> + [A<sub>μ</sub>,A<sub>ν</sub>]</div>
-  <div class="info">Yang-Mills · 1954 · Yang & Mills</div>
-</div>
 </body>
 </html>
